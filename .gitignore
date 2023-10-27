@@ -1,0 +1,5 @@
+# Ignore vscode
+.vscode/settings.json
+
+# Test files
+test_*.py
