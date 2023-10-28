@@ -85,18 +85,7 @@ def get_vlad_model(backbone: str = "DINOv2",
     c_centers = torch.load(cc_path)
     assert c_centers.shape[0] == num_c, "Cluster centers corrupted"
     
-    # TODO: Main logic task list
-    """
-        The logic should have DINOv2 feature extraction followed by
-        VLAD from cluster centers.
-        
-        - [x] Import DINOv2 logic
-        - [x] Import VLAD logic
-        - [x] Test with AnyLoc-VLAD-DINOv2
-        - [ ] Remove VLAD caching (it'll not be used here and it'll
-                only complicate things)
-        - [ ] Test with AnyLoc-VLAD-DINOv2
-    """
+    # Return model
     model = nn.Identity()   # Placeholder
     device = torch.device(device)
     if backbone == "dinov2":

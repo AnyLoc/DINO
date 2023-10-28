@@ -3,6 +3,7 @@
 # %%
 import torch
 from torch import nn
+import einops as ein
 # Internal
 from dinov2_extractor import DinoV2ExtractFeatures
 from utilities import VLAD
@@ -49,11 +50,16 @@ class AnyLocVladDinov2(nn.Module):
     # Forward pass
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         img_pt = x
-        # TODO: Add batching feature
-        assert len(img_pt.shape) == 4 and img_pt.shape[:2] == (1, 3),\
-                "Pass only single RGB image"
+        shapes = ein.parse_shape(img_pt, "b c h w")
+        assert shapes["c"] == 3, "Image(s) must be RGB!"
+        assert shapes["h"] % 14 == shapes["w"] % 14 == 0, \
+                "Height and width should be multiple of 14 (for "\
+                "patching)"
         img_pt = img_pt.to(self.device)
         # Extract features
-        ret = self.dino_extractor(img_pt)
-        gd = self.vlad.generate(ret[0].cpu())   # VLAD on CPU only!
-        return gd.to(self.device)
+        ret = self.dino_extractor(img_pt)   # [b, (H.W), dino_dim]
+        gds = torch.empty([shapes["b"], # Global descs: [b, vlad_dim]
+                self.vlad.desc_dim * self.vlad.num_clusters])
+        for i in range(shapes["b"]):
+            gds[i] = self.vlad.generate(ret[i].cpu())   # VLAD on CPU!
+        return gds.to(self.device)
