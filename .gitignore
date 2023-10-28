@@ -3,3 +3,7 @@
 
 # Test files
 test_*.py
+
+# Python cache
+*.pyc
+__pycache__/

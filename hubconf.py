@@ -10,6 +10,7 @@ dependencies = [
 import os
 import torch
 from torch import nn
+from model_wrapper import AnyLocVladDinov2
 
 
 # %%
@@ -73,22 +74,30 @@ def get_vlad_model(backbone: str = "DINOv2",
     if os.path.isdir(loc_path) == False:    # Create if not there
         os.makedirs(loc_path)
     print(f"Storing (torch.hub) cache in: {loc_path}")
-    cc_fpath = torch.hub.download_url_to_file(
-            f"{BASER_URL}/{cc_fname}", f"{loc_path}/{cc_fname}")
+    cc_path = f"{loc_path}/{cc_fname}"
+    torch.hub.download_url_to_file(f"{BASER_URL}/{cc_fname}", cc_path)
+    c_centers = torch.load(cc_path)
+    assert c_centers.shape[0] == num_c, "Cluster centers corrupted"
     
-    # DEBUG: Main logic notes
+    # TODO: Main logic task list
     """
         The logic should have DINOv2 feature extraction followed by
         VLAD from cluster centers.
         
-        - [ ] Import DINOv2 logic
-        - [ ] Import VLAD logic
+        - [x] Import DINOv2 logic
+        - [x] Import VLAD logic
+        - [x] Test with AnyLoc-VLAD-DINOv2
         - [ ] Remove VLAD caching (it'll not be used here and it'll
                 only complicate things)
         - [ ] Test with AnyLoc-VLAD-DINOv2
     """
-    # TODO: Develop the main logic. Placeholder for now
-    model = nn.Identity()
+    model = nn.Identity()   # Placeholder
+    if backbone == "dinov2":
+        model = AnyLocVladDinov2(c_centers, 
+                dino_model=f"{backbone}_{vit_model}", layer=vit_layer,
+                facet=vit_facet, num_c=num_c)
+    else:
+        raise NotImplementedError(f"{backbone = } not implemented!")
     return model
 
 
