@@ -68,7 +68,10 @@ def get_vlad_model(backbone: str = "DINOv2",
         raise ValueError(f"Cluster centers for {cc_fname} not found!")
     # Download the cluster centers
     _ex = lambda x: os.path.realpath(os.path.expanduser(x))
-    loc_path = _ex(torch.hub.get_dir())
+    loc_pthub_path = _ex(torch.hub.get_dir())
+    loc_path = f"{loc_pthub_path}/checkpoints/anyloc_files"
+    # if os.path.isdir(loc_path) == False:  # TODO: Testing
+    #     os.makedirs(loc_path)
     print(f"Storing (torch.hub) cache in: {loc_path}")
     cc_fpath = torch.hub.download_url_to_file(
             f"{BASER_URL}/{cc_fname}", f"{loc_path}/{cc_fname}")
