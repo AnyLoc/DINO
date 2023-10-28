@@ -15,3 +15,4 @@ Please see: [anyloc.github.io](https://anyloc.github.io/) or the main [AnyLoc re
 ## References
 
 - [torch.hub](https://pytorch.org/docs/stable/hub.html)
+    - [Download directory](https://pytorch.org/docs/stable/hub.html#where-are-my-downloaded-models-saved)
