@@ -12,7 +12,7 @@ from typing import Literal, Union, List
 
 
 # %%
-# VLAD global descriptor implementation
+# VLAD global descriptor implementation (more compact and fast)
 class VLAD:
     """
         An implementation of VLAD algorithm given database and query
@@ -22,24 +22,7 @@ class VLAD:
         - num_clusters:     Number of cluster centers for VLAD
         - desc_dim:         Descriptor dimension. If None, then it is
                             inferred when running `fit` method.
-        - intra_norm:       If True, intra normalization is applied
-                            when constructing VLAD
-        - norm_descs:       If True, the given descriptors are 
-                            normalized before training and predicting 
-                            VLAD descriptors. Different from the
-                            `intra_norm` argument.
-        - dist_mode:        Distance mode for KMeans clustering for 
-                            vocabulary (not residuals). Must be in 
-                            {'euclidean', 'cosine'}.
-        - vlad_mode:        Mode for descriptor assignment (to cluster
-                            centers) in VLAD generation. Must be in
-                            {'soft', 'hard'}
-        - soft_temp:        Temperature for softmax (if 'vald_mode' is
-                            'soft') for assignment
-        - cache_dir:        Directory to cache the VLAD vectors. If
-                            None, then no caching is done. If a str,
-                            then it is assumed as the folder path. Use
-                            absolute paths.
+        - **kwargs:         Kept for backward compatibility
         
         Notes:
         - Arandjelovic, Relja, and Andrew Zisserman. "All about VLAD."
@@ -47,95 +30,14 @@ class VLAD:
             Pattern Recognition. 2013.
     """
     def __init__(self, num_clusters: int, 
-                desc_dim: Union[int, None]=None, 
-                intra_norm: bool=True, norm_descs: bool=True, 
-                dist_mode: str="cosine", vlad_mode: str="hard", 
-                soft_temp: float=1.0, 
-                cache_dir: Union[str,None]=None) -> None:
+                desc_dim: Union[int, None]=None,  
+                **kwargs) -> None:
         self.num_clusters = num_clusters
         self.desc_dim = desc_dim
-        self.intra_norm = intra_norm
-        self.norm_descs = norm_descs
-        self.mode = dist_mode
-        self.vlad_mode = str(vlad_mode).lower()
-        assert self.vlad_mode in ['soft', 'hard']
-        self.soft_temp = soft_temp
+        self.mode = "cosine"    # Distance for clustering
         # Set in the training phase
-        self.c_centers = None
+        self.c_centers: torch.Tensor = None
         self.kmeans = None
-        # Set the caching
-        self.cache_dir = cache_dir
-        if self.cache_dir is not None:
-            self.cache_dir = os.path.abspath(os.path.expanduser(
-                    self.cache_dir))
-            if not os.path.exists(self.cache_dir):
-                os.makedirs(self.cache_dir)
-                print(f"Created cache directory: {self.cache_dir}")
-            else:
-                print("Warning: Cache directory already exists: " \
-                        f"{self.cache_dir}")
-        else:
-            print("VLAD caching is disabled.")
-    
-    def can_use_cache_vlad(self):
-        """
-            Checks if the cache directory is a valid cache directory.
-            For it to be valid, it must exist and should at least
-            include the cluster centers file.
-            
-            Returns:
-            - True if the cache directory is valid
-            - False if 
-                - the cache directory doesn't exist
-                - exists but doesn't contain the cluster centers
-                - no caching is set in constructor
-        """
-        if self.cache_dir is None:
-            return False
-        if not os.path.exists(self.cache_dir):
-            return False
-        if os.path.exists(f"{self.cache_dir}/c_centers.pt"):
-            return True
-        else:
-            return False
-    
-    def can_use_cache_ids(self, 
-                cache_ids: Union[List[str], str, None],
-                only_residuals: bool=False) -> bool:
-        """
-            Checks if the given cache IDs exist in the cache directory
-            and returns True if all of them exist.
-            The cache is stored in the following files:
-            - c_centers.pt:     Cluster centers
-            - `cache_id`_r.pt:  Residuals for VLAD
-            - `cache_id`_l.pt:  Labels for VLAD (hard assignment)
-            - `cache_id`_s.pt:  Soft assignment for VLAD
-            
-            The function returns False if cache cannot be used or if
-            any of the cache IDs are not found. If all cache IDs are
-            found, then True is returned.
-            
-            This function is mainly for use outside the VLAD class.
-        """
-        if not self.can_use_cache_vlad():
-            return False
-        if cache_ids is None:
-            return False
-        if isinstance(cache_ids, str):
-            cache_ids = [cache_ids]
-        for cache_id in cache_ids:
-            if not os.path.exists(
-                    f"{self.cache_dir}/{cache_id}_r.pt"):
-                return False
-            if self.vlad_mode == "hard" and not os.path.exists(
-                    f"{self.cache_dir}/{cache_id}_l.pt") and not \
-                        only_residuals:
-                return False
-            if self.vlad_mode == "soft" and not os.path.exists(
-                    f"{self.cache_dir}/{cache_id}_s.pt") and not \
-                        only_residuals:
-                return False
-        return True
     
     # Generate cluster centers
     def fit(self, train_descs: Union[np.ndarray, torch.Tensor, None]):
@@ -157,15 +59,7 @@ class VLAD:
         # Clustering to create vocabulary
         self.kmeans = fpk.KMeans(self.num_clusters, mode=self.mode)
         # Check if cache exists
-        if self.can_use_cache_vlad():
-            print("Using cached cluster centers")
-            self.c_centers = torch.load(
-                    f"{self.cache_dir}/c_centers.pt")
-            self.kmeans.centroids = self.c_centers
-            if self.desc_dim is None:
-                self.desc_dim = self.c_centers.shape[1]
-                print(f"Desc dim set to {self.desc_dim}")
-        elif train_descs is None:
+        if train_descs is None:
             if self.c_centers is None:
                 raise ValueError("No training descriptors given for "\
                                 "cluster centers")
@@ -179,14 +73,9 @@ class VLAD:
                     to(torch.float32)
             if self.desc_dim is None:
                 self.desc_dim = train_descs.shape[1]
-            if self.norm_descs:
-                train_descs = F.normalize(train_descs)
+            train_descs = F.normalize(train_descs)
             self.kmeans.fit(train_descs)
             self.c_centers = self.kmeans.centroids
-            if self.cache_dir is not None:
-                print("Caching cluster centers")
-                torch.save(self.c_centers, 
-                        f"{self.cache_dir}/c_centers.pt")
     
     def fit_and_generate(self, 
                 train_descs: Union[np.ndarray, torch.Tensor]) \
@@ -214,8 +103,7 @@ class VLAD:
         # For each image, stack VLAD
         return torch.stack([self.generate(tr) for tr in train_descs])
     
-    def generate(self, query_descs: Union[np.ndarray, torch.Tensor],
-                cache_id: Union[str, None]=None) -> torch.Tensor:
+    def generate(self, query_descs: torch.Tensor) -> torch.Tensor:
         """
             Given the query descriptors, generate a VLAD vector. Call
             `fit` before using this method. Use this for only single
@@ -223,73 +111,54 @@ class VLAD:
             `generate_multi` for multiple images.
             
             Parameters:
-            - query_descs:  Query descriptors of shape [n_q, desc_dim]
-                            where 'n_q' is number of 'desc_dim' 
-                            dimensional descriptors in a query image.
-            - cache_id:     If not None, then the VLAD vector is
-                            constructed using the residual and labels
-                            from this file.
+            - query_descs:  Query descriptors of shape [b, n_q,
+                            desc_dim] where 'b' is the batch size,
+                            'n_q' is number of 'desc_dim' descriptors.
             
             Returns:
-            - n_vlas:   Normalized VLAD: [num_clusters*desc_dim]
+            - n_vlas:   Normalized VLAD: [b, num_clusters*desc_dim]
         """
-        residuals = self.generate_res_vec(query_descs, cache_id)
-        # Un-normalized VLAD vector: [c*d,]
-        un_vlad = torch.zeros(self.num_clusters * self.desc_dim)
-        if self.vlad_mode == 'hard':
-            # Get labels for assignment of descriptors
-            if cache_id is not None and self.can_use_cache_vlad() \
-                    and os.path.isfile(
-                        f"{self.cache_dir}/{cache_id}_l.pt"):
-                labels = torch.load(
-                        f"{self.cache_dir}/{cache_id}_l.pt")
-            else:
-                labels = self.kmeans.predict(query_descs)   # [q]
-                if cache_id is not None and self.can_use_cache_vlad():
-                    torch.save(labels, 
-                            f"{self.cache_dir}/{cache_id}_l.pt")
-            # Create VLAD from residuals and labels
-            used_clusters = set(labels.numpy())
-            for k in used_clusters:
-                # Sum of residuals for the descriptors in the cluster
-                #  Shape:[q, c, d]  ->  [q', d] -> [d]
-                cd_sum = residuals[labels==k,k].sum(dim=0)
-                if self.intra_norm:
-                    cd_sum = F.normalize(cd_sum, dim=0)
-                un_vlad[k*self.desc_dim:(k+1)*self.desc_dim] = cd_sum
-        else:       # Soft cluster assignment
-            # Cosine similarity: 1 = close, -1 = away
-            if cache_id is not None and self.can_use_cache_vlad() \
-                    and os.path.isfile(
-                        f"{self.cache_dir}/{cache_id}_s.pt"):
-                soft_assign = torch.load(
-                        f"{self.cache_dir}/{cache_id}_s.pt")
-            else:
-                cos_sims = F.cosine_similarity( # [q, c]
-                        ein.rearrange(query_descs, "q d -> q 1 d"), 
-                        ein.rearrange(self.c_centers, "c d -> 1 c d"), 
-                        dim=2)
-                soft_assign = F.softmax(self.soft_temp*cos_sims, 
-                        dim=1)
-                if cache_id is not None and self.can_use_cache_vlad():
-                    torch.save(soft_assign, 
-                            f"{self.cache_dir}/{cache_id}_s.pt")
-            # Soft assignment scores (as probabilities): [q, c]
-            for k in range(0, self.num_clusters):
-                w = ein.rearrange(soft_assign[:, k], "q -> q 1 1")
-                # Sum of residuals for all descriptors (for cluster k)
-                cd_sum = ein.rearrange(w * residuals, 
-                            "q c d -> (q c) d").sum(dim=0)  # [d]
-                if self.intra_norm:
-                    cd_sum = F.normalize(cd_sum, dim=0)
-                un_vlad[k*self.desc_dim:(k+1)*self.desc_dim] = cd_sum
-        # Normalize the VLAD vector
-        n_vlad = F.normalize(un_vlad, dim=0)
-        return n_vlad
+        if len(query_descs.shape) == 2:
+            query_descs = ein.rearrange(query_descs, "q d -> 1 q d")
+        assert query_descs.device == self.c_centers.device
+        img_descs = query_descs         # [b, q, d]
+        c_centers = self.c_centers      # [c, d]
+        # Cluster labels (dot product ~ cosine distance; need max)
+        _i1 = F.normalize(img_descs, dim=2)
+        _c1 = F.normalize(c_centers, dim=1)
+        labels = ein.rearrange(_i1, "b n d -> (b n) d") \
+                    @ ein.rearrange(_c1, "c d -> d c")
+        labels = ein.rearrange(labels, "(b n) c -> b n c", 
+                b=img_descs.shape[0], n=img_descs.shape[1])
+        labels = labels.argmax(dim=2)   # [b, q, c]
+        # Residuals
+        residuals = ein.rearrange(_i1, "b n d -> b n 1 d") \
+                    - ein.repeat(c_centers, "c d -> b 1 c d", 
+                            b=img_descs.shape[0])
+        b, q, c, d = residuals.shape
+        b_, q_ = labels.shape
+        un_vlad = torch.zeros(b, c, d, device=c_centers.device)
+        assert b == b_ and q == q_
+        # TODO: Probably make this batching more efficient
+        """
+            Can we make this even more efficient (instead of using two
+            for loops)?
+            See: 
+            - https://pytorch.org/docs/stable/generated/torch.Tensor.scatter_reduce_.html
+        """
+        for bi in range(b):
+            for ci in range(c):
+                # Find all indices where label matches
+                un_vlad[bi, ci] += residuals[bi, labels[bi] == ci]\
+                                        [:, ci, :].sum(dim=0)
+        n_vlad = F.normalize(un_vlad, dim=2)
+        raw_vlad = ein.rearrange(n_vlad, "b c d -> b (c d)")
+        vlad = F.normalize(raw_vlad, dim=1) # [b, c*d]
+        return vlad
     
     def generate_multi(self, 
             multi_query: Union[np.ndarray, torch.Tensor, list],
-            cache_ids: Union[List[str], None]=None) \
+            **kwargs) \
             -> Union[torch.Tensor, list]:
         """
             Given query descriptors from multiple images, generate
@@ -302,106 +171,8 @@ class VLAD:
                             descriptor each. If a List (can then have
                             different number of keypoints in each 
                             image), then the result is also a list.
-            - cache_ids:    Cache IDs for the VLAD vectors. If None,
-                            then no caching is done (stored or 
-                            retrieved). If a list, then the length
-                            should be 'n_imgs' (one per image).
             
             Returns:
             - multi_res:    VLAD descriptors for the queries
         """
-        if cache_ids is None:
-            cache_ids = [None] * len(multi_query)
-        res = [self.generate(q, c) \
-                for (q, c) in zip(multi_query, cache_ids)]
-        try:    # Most likely pytorch
-            res = torch.stack(res)
-        except TypeError:
-            try:    # Otherwise numpy
-                res = np.stack(res)
-            except TypeError:
-                pass    # Let it remain as a list
-        return res
-    
-    def generate_res_vec(self, 
-                query_descs: Union[np.ndarray, torch.Tensor],
-                cache_id: Union[str, None]=None) -> torch.Tensor:
-        """
-            Given the query descriptors, generate a VLAD vector. Call
-            `fit` before using this method. Use this for only single
-            images and with descriptors stacked. Use function
-            `generate_multi` for multiple images.
-            
-            Parameters:
-            - query_descs:  Query descriptors of shape [n_q, desc_dim]
-                            where 'n_q' is number of 'desc_dim' 
-                            dimensional descriptors in a query image.
-            - cache_id:     If not None, then the VLAD vector is
-                            constructed using the residual and labels
-                            from this file.
-            
-            Returns:
-            - residuals:    Residual vector: shape [n_q, n_c, d]
-        """
-        assert self.kmeans is not None
-        assert self.c_centers is not None
-        # Compute residuals (all query to cluster): [q, c, d]
-        if cache_id is not None and self.can_use_cache_vlad() and \
-                os.path.isfile(f"{self.cache_dir}/{cache_id}_r.pt"):
-            residuals = torch.load(
-                    f"{self.cache_dir}/{cache_id}_r.pt")
-        else:
-            if type(query_descs) == np.ndarray:
-                query_descs = torch.from_numpy(query_descs)\
-                    .to(torch.float32)
-            if self.norm_descs:
-                query_descs = F.normalize(query_descs)
-            residuals = ein.rearrange(query_descs, "q d -> q 1 d") \
-                    - ein.rearrange(self.c_centers, "c d -> 1 c d")
-            if cache_id is not None and self.can_use_cache_vlad():
-                cid_dir = f"{self.cache_dir}/"\
-                        f"{os.path.split(cache_id)[0]}"
-                if not os.path.isdir(cid_dir):
-                    os.makedirs(cid_dir)
-                    print(f"Created directory: {cid_dir}")
-                torch.save(residuals, 
-                        f"{self.cache_dir}/{cache_id}_r.pt")
-        # print("residuals",residuals.shape)
-        return residuals
-
-    def generate_multi_res_vec(self, 
-            multi_query: Union[np.ndarray, torch.Tensor, list],
-            cache_ids: Union[List[str], None]=None) \
-            -> Union[torch.Tensor, list]:
-        """
-            Given query descriptors from multiple images, generate
-            the VLAD for them.
-            
-            Parameters:
-            - multi_query:  Descriptors of shape [n_imgs, n_kpts, d]
-                            There are 'n_imgs' and each image has
-                            'n_kpts' keypoints, with 'd' dimensional
-                            descriptor each. If a List (can then have
-                            different number of keypoints in each 
-                            image), then the result is also a list.
-            - cache_ids:    Cache IDs for the VLAD vectors. If None,
-                            then no caching is done (stored or 
-                            retrieved). If a list, then the length
-                            should be 'n_imgs' (one per image).
-                            
-            Returns:
-            - multi_res:    VLAD descriptors for the queries
-        """
-        if cache_ids is None:
-            cache_ids = [None] * len(multi_query)
-        res = [self.generate_res_vec(q, c) \
-                for (q, c) in zip(multi_query, cache_ids)]
-        try:    # Most likely pytorch
-            res = torch.stack(res)
-        except TypeError:
-            try:    # Otherwise numpy
-                res = np.stack(res)
-            except TypeError:
-                pass    # Let it remain as a list
-        return res
-
+        return self.generate(multi_query)

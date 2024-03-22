@@ -29,7 +29,7 @@ class AnyLocVladDinov2(nn.Module):
         self.dino_extractor = self._get_dino_extractor()
         # VLAD clustering
         self.vlad = VLAD(num_c)
-        self.vlad.c_centers = c_centers # Load cluster centers
+        self.vlad.c_centers = c_centers.to(self.device)
         self.vlad.fit(None) # Load the database (vocabulary/c_centers)
     
     # Extractor
@@ -58,8 +58,5 @@ class AnyLocVladDinov2(nn.Module):
         img_pt = img_pt.to(self.device)
         # Extract features
         ret = self.dino_extractor(img_pt)   # [b, (H.W), dino_dim]
-        gds = torch.empty([shapes["b"], # Global descs: [b, vlad_dim]
-                self.vlad.desc_dim * self.vlad.num_clusters])
-        for i in range(shapes["b"]):
-            gds[i] = self.vlad.generate(ret[i].cpu())   # VLAD on CPU!
+        gds = self.vlad.generate_multi(ret)
         return gds.to(self.device)

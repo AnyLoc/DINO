@@ -7,3 +7,6 @@ test_*.py
 # Python cache
 *.pyc
 __pycache__/
+
+# Ignore cluster centers
+/*.pt
