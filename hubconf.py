@@ -29,10 +29,10 @@ BASER_URL = "https://github.com/AnyLoc/DINO/releases/download/v1"
 
 
 # %%
-def get_vlad_model(backbone: str = "DINOv2", 
+def get_vlad_model(domain: str, backbone: str = "DINOv2", 
             vit_model: str = "ViT-G/14", vit_layer: int = 31, 
             vit_facet: str = "Value", num_c: int = 32, 
-            domain: str = "indoor", device: torch.device = "cpu") \
+            device: torch.device = "cpu") \
             -> nn.Module:
     """
         Load an AnyLoc-VLAD-[backbone] model from torch.hub
@@ -41,6 +41,9 @@ def get_vlad_model(backbone: str = "DINOv2",
         deployment setting/use case (environment).
         
         Parameters:
+        - domain (str):     Domain for cluster centers. Should be
+                            "indoor", "urban", "aerial", "structured",
+                            "unstructured", or "global".
         - backbone (str):   The backbone to use. Should be "DINOv2" or
                             "DINOv1".
         - vit_model (str):  The ViT model (architecture) to use. Must
@@ -50,20 +53,21 @@ def get_vlad_model(backbone: str = "DINOv2",
         - vit_facet (str):  The ViT facet to use for extraction.
         - num_c (int):      Number of cluster centers to use (for
                             VLAD clustering).
-        - domain (str):     Domain for cluster centers.
         - device (torch.device):    Device for model; "cpu" or "cuda"
         
         Notes:
         - All string arguments are converted to lower case.
     """
     # Parse arguments (assert types)
+    domain = str(domain).lower()
+    assert domain in ["indoor", "urban", "aerial", "structured",
+            "unstructured", "global"], f"Invalid {domain = }"
     backbone = str(backbone).lower()
     vit_model = str(vit_model)\
         .replace("/", "").replace("-", "").lower()
     vit_layer = int(vit_layer)
     vit_facet = str(vit_facet).lower()
     num_c = int(num_c)
-    domain = str(domain).lower()
     # Make sure cluster centers are available
     cc_fname = f"{backbone}_{vit_model}_l{vit_layer}_{vit_facet}_"\
             f"c{num_c}_{domain}_c_centers.pt"

@@ -23,7 +23,7 @@ Basic usage
 ```py
 import torch
 model = torch.hub.load("AnyLoc/DINO", "get_vlad_model", 
-        backbone="DINOv2", device="cuda")
+        domain="indoor", backbone="DINOv2", device="cuda")
 # Images
 img = torch.rand(1, 3, 224, 224)
 # Result: VLAD descriptors of shape [1, 49152]
