@@ -13,6 +13,7 @@ Please open issues about this work in [AnyLoc/AnyLoc](https://github.com/AnyLoc/
 - [AnyLoc on Torch Hub](#anyloc-on-torch-hub)
     - [Table of contents](#table-of-contents)
     - [Tutorial](#tutorial)
+        - [Map-specific Vocabulary](#map-specific-vocabulary)
     - [TODO](#todo)
     - [References](#references)
 
@@ -55,6 +56,26 @@ print(torch.hub.list("AnyLoc/DINO"))
 # Help about an individual function - like "get_vlad_model"
 r = torch.hub.help("AnyLoc/DINO", "get_vlad_model")
 print(r)
+```
+
+### Map-specific Vocabulary
+
+This is to use your own dataset for calculating the VLAD clusters
+
+```py
+import einops as ein
+# Load model
+model = torch.hub.load("AnyLoc/DINO", "get_vlad_model", 
+        domain=None, backbone="DINOv2", device="cuda")
+# Extract features
+imgs = torch.rand(16, 3, 224, 224)  # Database images
+res = model.extract(imgs)
+res_all = ein.rearrange(res, "B N D -> (B N) D")
+# Fit VLAD (to get cluster centers)
+model.fit(res_all)
+# Get the descriptors
+img = torch.rand(1, 3, 224, 224)    # Inference images
+gd = model(img) # Global descriptors
 ```
 
 ## TODO
