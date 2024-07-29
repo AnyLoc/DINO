@@ -18,7 +18,15 @@ Please open issues about this work in [AnyLoc/AnyLoc](https://github.com/AnyLoc/
 
 ## Tutorial
 
-Basic usage
+Install the following
+
+```bash
+pip install einops      # Codebase uses this
+pip install fast_pytorch_kmeans     # For VLAD codebase
+```
+
+Basic usage (pass in the `domain`, `backbone`, and set the device to `cuda` for
+using a GPU)
 
 ```py
 import torch
@@ -44,7 +52,7 @@ You can get more help from
 ```py
 # List of functions
 print(torch.hub.list("AnyLoc/DINO"))
-# Help about individual functions
+# Help about an individual function - like "get_vlad_model"
 r = torch.hub.help("AnyLoc/DINO", "get_vlad_model")
 print(r)
 ```
